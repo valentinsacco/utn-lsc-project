@@ -22,6 +22,7 @@ enum SocketTypes {
 // ❌ currentStateClient
 // ❌ startMeasure
 // ❌ stopMeasure
+// 🆕 [SENT (node) - READ (web)] motor-direction
 
 // Do: 
 //    - sent currents nodes variables state from nodes to web client (current-node-variables-state)
@@ -45,6 +46,8 @@ io.on('connection', (socket) => {
             // En este caso, el valor aux trae el nombre del nodo
             socket.data.name = aux
             socket.data.type = SocketTypes.NODE
+
+            // Checkear que el nombre del nodo tenga una longitud mayor a 1 carácter
 
             // socket.join(aux) (No funcionando - Implementar)
 
@@ -116,6 +119,8 @@ io.on('connection', (socket) => {
                     }
                 })
 
+                socket.emit('type-fb', JSON.stringify({}))
+
                 return socket.emit('current-nodes-status', nodesWithLatency)
             } catch (error) {
                 console.log(error)
@@ -166,9 +171,16 @@ io.on('connection', (socket) => {
         }
     })
 
+    // ["plant-control-fb"] Evento emitido por un node hacia el servidor - ["plant-control-fb"] Evento de emitido por el servidor hacia la web
+    socket.on('plant-control-fb', async data => {
+        if (socket.data.type === SocketTypes.NODE) {
+            io.in('clients').emit('plant-control-fb', data)
+        }
+    })
+
     // Motor (Eventos de emitidos por la Web)
 
-    /* Esteblece el estado del motor en encendido o apagado */
+    /* Esteblece el estado del motor en "encendido" o "apagado" */
     // data --> { node (Nombre del Nodo), state: ["on", "off"] } 
     socket.on('motor-state', async data => {
         const parsed = JSON.parse(data) as { node: string, state: string }
@@ -179,7 +191,19 @@ io.on('connection', (socket) => {
         }
     })
 
-    // Variables (["get-variables-states"] Evento de emitido por la web hacia el servidor - ["variables-states"] Evento de emitido por el servidor hacia los nodos)
+    /* Esteblece el sentido de giro del motor en "clockwise" o "anticlockwise" */
+    // data --> { node (Nombre del Nodo), direction: ["clockwise", "anticlockwise"] } 
+    // ["motor-direction"] Evento emitido por la web hacia el servidor - ["motor-direction"] Evento de emitido por el servidor hacia un nodo específico
+    socket.on('motor-direction', async data => {
+        const parsed = JSON.parse(data) as { node: string, direction: string }
+        if (socket.data.type === SocketTypes.CLIENT) {
+            const s = await io.fetchSockets()
+            const node = s.find((s) => s.data.name === parsed.node)
+            node?.emit('motor-direction', parsed.direction)
+        }
+    })
+
+    // Variables (["get-variables-states"] Evento de emitido por la web hacia el servidor - ["variables-states"] Evento de emitido por el servidor hacia un nodo específico)
     // data --> id del socket que consulta (cliente web)
     socket.on('get-variables-states', async data => {
         if (socket.data.type === SocketTypes.CLIENT) {
